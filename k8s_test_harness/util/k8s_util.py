@@ -7,7 +7,7 @@ import logging
 from typing import Any, List
 
 from k8s_test_harness import config, harness
-from k8s_test_harness.util import exec_util
+from k8s_test_harness.util import constants, exec_util
 
 LOG = logging.getLogger(__name__)
 
@@ -114,3 +114,57 @@ def get_join_token(
 # Join an existing cluster.
 def join_cluster(instance: harness.Instance, join_token: str):
     instance.exec(["k8s", "join-cluster", join_token])
+
+
+def wait_for_resource(
+    instance: harness.Instance,
+    resource_type: str,
+    name: str,
+    namespace: str = constants.K8S_NS_DEFAULT,
+    condition: str = constants.K8S_CONDITION_AVAILABLE,
+):
+    """Waits for the given resource to reach the given condition."""
+    exec_util.stubbornly(retries=5, delay_s=1).on(instance).exec(
+        [
+            "k8s",
+            "kubectl",
+            "wait",
+            "--namespace",
+            namespace,
+            f"--for=condition={condition}",
+            resource_type,
+            name,
+            "--timeout",
+            "60s",
+        ]
+    )
+
+
+def wait_for_deployment(
+    instance: harness.Instance,
+    name: str,
+    namespace: str = constants.K8S_NS_DEFAULT,
+    condition: str = constants.K8S_CONDITION_AVAILABLE,
+):
+    """Waits for the given deployment to reach the given condition."""
+    wait_for_resource(instance, constants.K8S_DEPLOYMENT, name, namespace, condition)
+
+
+def wait_for_daemonset(
+    instance: harness.Instance, name: str, namespace: str = constants.K8S_NS_DEFAULT
+):
+    """Waits for the given daemonset to become available."""
+    exec_util.stubbornly(retries=5, delay_s=1).on(instance).exec(
+        [
+            "k8s",
+            "kubectl",
+            "rollout",
+            "status",
+            "--namespace",
+            namespace,
+            constants.K8S_DAEMONSET,
+            name,
+            "--timeout",
+            "60s",
+        ]
+    )
