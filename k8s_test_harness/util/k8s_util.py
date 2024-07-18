@@ -2,14 +2,22 @@
 # Copyright 2024 Canonical, Ltd.
 # See LICENSE file for licensing details
 #
+
+import itertools
 import json
 import logging
-from typing import Any, List
+import os
+from typing import Any, List, NamedTuple
 
 from k8s_test_harness import config, harness
 from k8s_test_harness.util import constants, exec_util
 
 LOG = logging.getLogger(__name__)
+
+
+class HelmImage(NamedTuple):
+    variable: str
+    prefix: str = None
 
 
 # Installs and setups the k8s snap on the given instance and connects the interfaces.
@@ -168,3 +176,73 @@ def wait_for_daemonset(
             "60s",
         ]
     )
+
+
+def get_helm_install_command(
+    name: str,
+    chart_name: str,
+    namespace: str = constants.K8S_NS_KUBE_SYSTEM,
+    repository: str = None,
+    images: List[HelmImage] = None,
+    runAsUser: int = 584792,
+    set_configs: List[str] = None,
+):
+    """Creates a helm install command for the given helm chart.
+
+    The chart_name can be a locally-cloned helm chart.
+
+    This function will prepend a "--set" string before each element in
+    set_configs in the final helm install command.
+
+    Returns:
+        list of strings representing the helm install command.
+    """
+    images = images or []
+    set_configs = set_configs or []
+
+    helm_command = [
+        "k8s",
+        "helm",
+        "install",
+        name,
+        chart_name,
+        "--namespace",
+        namespace,
+        "--create-namespace",
+    ]
+
+    if repository:
+        helm_command += [
+            "--repo",
+            repository,
+        ]
+
+    for image in images:
+        image_uri = os.getenv(image.variable)
+        assert image_uri is not None, f"{image.variable} is not set"
+        image_split = image_uri.split(":")
+        image_name = image_split[0]
+
+        # This helm charts requires setting the image registry separately.
+        parts = image_name.split("/")
+        if len(parts) > 1:
+            image_name = "/".join(parts[1:])
+
+        prefix = ""
+        if image.prefix:
+            prefix = f"{image.prefix}."
+
+        helm_command += [
+            "--set",
+            f"{prefix}image.repository={image_name}",
+            "--set",
+            f"{prefix}image.tag={image_split[1]}",
+            "--set",
+            f"{prefix}securityContext.runAsUser={runAsUser}",
+        ]
+
+    # Pair each configuration with a "--set".
+    pairs = itertools.zip_longest(["--set"] * len(set_configs), set_configs)
+    helm_command += list(itertools.chain.from_iterable(pairs))
+
+    return helm_command
