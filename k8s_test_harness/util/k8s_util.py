@@ -6,7 +6,6 @@
 import itertools
 import json
 import logging
-import os
 from typing import Any, List, NamedTuple
 
 from k8s_test_harness import config, harness
@@ -16,7 +15,7 @@ LOG = logging.getLogger(__name__)
 
 
 class HelmImage(NamedTuple):
-    variable: str
+    uri: str
     prefix: str = None
 
 
@@ -218,9 +217,7 @@ def get_helm_install_command(
         ]
 
     for image in images:
-        image_uri = os.getenv(image.variable)
-        assert image_uri is not None, f"{image.variable} is not set"
-        image_split = image_uri.split(":")
+        image_split = image.uri.split(":")
         image_name = image_split[0]
 
         # This helm charts requires setting the image registry separately.
