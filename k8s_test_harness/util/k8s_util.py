@@ -220,11 +220,6 @@ def get_helm_install_command(
         image_split = image.uri.split(":")
         image_name = image_split[0]
 
-        # This helm charts requires setting the image registry separately.
-        parts = image_name.split("/")
-        if len(parts) > 1:
-            image_name = "/".join(parts[1:])
-
         prefix = ""
         if image.prefix:
             prefix = f"{image.prefix}."
