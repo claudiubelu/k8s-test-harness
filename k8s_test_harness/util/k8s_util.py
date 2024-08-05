@@ -246,6 +246,76 @@ def wait_for_statefulset(
     )
 
 
+def get_probe_property(
+    instance: harness.Instance,
+    property_name: str,
+    namespace: str = constants.K8S_NS_DEFAULT,
+    resource_type: str = constants.K8S_DEPLOYMENT,
+    name: str = None,
+    label: str = None,
+    container_name: str = None,
+    probe_type: str = constants.K8S_PROBE_LIVENESS,
+):
+    """Returns the probe HTTP port for the given Kubernetes resource.
+
+    Either the name or label must be given, and not both.
+
+    If the given resource_type has multiple containers, the container_name should be given.
+    Otherwise, only the first container will be considered.
+
+    The probe_type **must** match the casing.
+    """
+
+    if name and label:
+        raise Exception("name and label cannot be given at the same time!")
+
+    if not name and not label:
+        raise Exception("Either name or label needs to be given!")
+
+    if probe_type not in constants.ALL_PROBE_TYPES:
+        raise Exception(
+            f"Invalid probe type! Expected: {constants.ALL_PROBE_TYPES}, actual: {probe_type}"
+        )
+
+    cmd = [
+        "k8s",
+        "kubectl",
+        "get",
+        "-n",
+        namespace,
+        resource_type,
+    ]
+
+    if name:
+        cmd += [name]
+    else:
+        cmd += ["-l", label]
+
+    # when getting by label, kubectl returns a list.
+    prefix = ""
+    if label:
+        prefix = ".items[0]"
+
+    # daemonsets, deployments, replicasets, statefulsets have a .spec.template prefix.
+    if resource_type.lower() != constants.K8S_POD:
+        prefix = f"{prefix}.spec.template"
+
+    container = "0"
+    if container_name:
+        container = f"?(@.name=='{container_name}'"
+
+    selected_field = f"{{{prefix}.spec.containers[{container}].{probe_type}.httpGet.{property_name}}}"
+
+    cmd += [
+        "-o",
+        "jsonpath",
+        selected_field,
+    ]
+
+    out = instance.exec(cmd, capture_output=True, text=True)
+    return out.stdout.strip()
+
+
 def get_helm_install_command(
     name: str,
     chart_name: str,
