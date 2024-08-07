@@ -18,6 +18,7 @@ LOG = logging.getLogger(__name__)
 class HelmImage(NamedTuple):
     uri: str
     prefix: str = None
+    subitem: str = None
 
 
 # Installs and setups the k8s snap on the given instance and connects the interfaces.
@@ -299,11 +300,15 @@ def get_helm_install_command(
         if image.prefix:
             prefix = f"{image.prefix}."
 
+        subitem = ""
+        if image.subitem:
+            subitem = f"{image.subitem}."
+
         helm_command += [
             "--set",
-            f"{prefix}image.repository={image_name}",
+            f"{prefix}image.{subitem}repository={image_name}",
             "--set",
-            f"{prefix}image.tag={image_split[1]}",
+            f"{prefix}image.{subitem}tag={image_split[1]}",
             "--set",
             f"{prefix}securityContext.runAsUser={runAsUser}",
         ]
