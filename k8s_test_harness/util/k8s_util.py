@@ -42,7 +42,8 @@ def describe_resources_on_error(resource_type: str):
                 return fun(instance, *args, **kwargs)
             except Exception:
                 proc = instance.exec(
-                    ["k8s", "kubectl", "describe", resource_type], capture_output=True
+                    ["k8s", "kubectl", "describe", "-A", resource_type],
+                    capture_output=True,
                 )
                 LOG.info(
                     f"### All current '{resource_type}' definitions: "
