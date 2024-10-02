@@ -255,6 +255,7 @@ def get_helm_install_command(
     runAsUser: int = 584792,
     set_configs: List[str] = None,
     chart_version: str = None,
+    split_image_registry: bool = False,
 ):
     """Creates a helm install command for the given helm chart.
 
@@ -303,6 +304,19 @@ def get_helm_install_command(
         subitem = ""
         if image.subitem:
             subitem = f"{image.subitem}."
+
+        if split_image_registry:
+            # Some helm charts require the registry to be separated from the image.
+            registry = "docker.io"
+            parts = image_name.split("/")
+            if len(parts) > 2:
+                registry = parts[0]
+                image_name = "/".join(parts[1:])
+
+            helm_command += [
+                "--set",
+                f"{prefix}image.{subitem}registry={registry}",
+            ]
 
         helm_command += [
             "--set",
