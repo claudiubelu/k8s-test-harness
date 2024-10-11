@@ -7,6 +7,8 @@ import functools
 import itertools
 import json
 import logging
+import os
+import uuid
 from typing import Any, List, NamedTuple
 
 from k8s_test_harness import config, harness
@@ -333,3 +335,41 @@ def get_helm_install_command(
     helm_command += list(itertools.chain.from_iterable(pairs))
 
     return helm_command
+
+
+def install_mutating_pebble_webhook(instance: harness.Instance):
+    # The substrate might not have make installed.
+    install_command = [
+        "sudo",
+        "apt",
+        "install",
+        "-y",
+        "make",
+    ]
+    instance.exec(install_command)
+
+    clone_path = os.path.join(
+        "/tmp", f"mutating-pebble-webhook-rocks-{str(uuid.uuid4())}"
+    )
+
+    # We have all the necessary steps in this repository as a make target.
+    clone_command = [
+        "git",
+        "clone",
+        "https://github.com/canonical/mutating-pebble-webhook-rocks",
+        "--depth",
+        "1",
+        clone_path,
+    ]
+    instance.exec(clone_command)
+
+    make_command = [
+        "make",
+        "-C",
+        clone_path,
+        "all",
+        "KUBECTL=k8s kubectl",
+    ]
+    instance.exec(make_command)
+
+    wait_for_deployment(instance, "mutating-pebble-webhook", "pebble-webhook")
