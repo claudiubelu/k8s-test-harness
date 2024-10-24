@@ -3,7 +3,10 @@
 # See LICENSE file for licensing details
 #
 
+import json
 import logging
+import os
+import stat
 import subprocess
 from typing import List
 
@@ -29,6 +32,74 @@ def ensure_image_contains_paths(
 
     LOG.debug(f"Running command: {base_cmd}")
     subprocess.run(base_cmd, check=True)
+
+
+def _check_path_in_layers(path, layers):
+    # Assuming the layers are top to bottom.
+    for layer in layers:
+        full_path = os.path.join(layer, path.lstrip("/"))
+        try:
+            file_stat = os.lstat(full_path)
+        except FileNotFoundError:
+            # Not found in the current folder, check the next.
+            continue
+
+        mode = file_stat.st_mode
+        st_rdev = file_stat.st_rdev
+        if stat.S_ISWHT(mode) or (
+            stat.S_ISCHR(mode) and os.major(st_rdev) == 0 and os.minor(st_rdev) == 0
+        ):
+            # We found a whiteout file. This means that it's deleted.
+            # https://docs.docker.com/engine/storage/drivers/overlayfs-driver/#deleting-files-and-directories
+            # Character files with device type 0,0 may be added instead.
+            return False
+
+        return True
+
+    # Checked all layers and couldn't find it.
+    return False
+
+
+def ensure_image_contains_paths_bare(image: str, paths: List[str]):
+    """Ensures the given container image contains the provided paths
+    within it by checking its overlay2 fs.
+
+    This is useful for cases in which ensure_image_contains_paths is not an
+    option (e.g. bare / scratch based images).
+
+    This assumes that we have sufficient permissions to access the image layers.
+    """
+    if not paths:
+        return
+
+    # Ensure the image exists first.
+    pull_cmd = ["docker", "pull", image]
+    LOG.debug(f"Running command: {pull_cmd}")
+    subprocess.run(pull_cmd, check=True)
+
+    # Get image information.
+    inspect_cmd = ["docker", "inspect", image]
+    LOG.debug(f"Running command: {inspect_cmd}")
+    process = subprocess.run(inspect_cmd, check=True, capture_output=True, text=True)
+    image_info = json.loads(process.stdout)
+
+    graph_driver = image_info[0].get("GraphDriver")
+    assert (
+        graph_driver is not None
+    ), "Expected docker inspect result to contain GraphDriver"
+    assert (
+        graph_driver["Name"] == "overlay2"
+    ), f"Unsupported image GraphDriver: {graph_driver['Name']}"
+
+    # We'll be checking the layers from to top to bottom, UpperDir is the top-most layer, followed
+    # by LowerDir layers (from top to bottom).
+    layers = [graph_driver["Data"]["UpperDir"]]
+    layers += graph_driver["Data"]["LowerDir"].split(":")
+
+    for path in paths:
+        assert _check_path_in_layers(
+            path, layers
+        ), f"Expected {path} to exist in {image}."
 
 
 def list_files_under_container_image_dir(
