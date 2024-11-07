@@ -26,6 +26,11 @@ class HelmImage(NamedTuple):
 # Installs and setups the k8s snap on the given instance and connects the interfaces.
 def setup_k8s_snap(instance: harness.Instance):
     LOG.info("Install k8s snap")
+    if config.K8S_SNAP_PATH:
+        instance.exec(
+            ["snap", "install", "--classic", "--dangerous", config.K8S_SNAP_PATH]
+        )
+        return
     instance.exec(
         ["snap", "install", "k8s", "--classic", "--channel", config.SNAP_CHANNEL]
     )

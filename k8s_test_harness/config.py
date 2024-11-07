@@ -9,7 +9,10 @@ DIR = Path(__file__).absolute().parent
 
 MANIFESTS_DIR = DIR / "templates"
 
-# SNAP is the absolute path to the snap against which we run the integration tests.
+# K8S_SNAP_PATH is the absolute path to the snap against which we run the integration tests.
+K8S_SNAP_PATH = os.getenv("TEST_K8S_SNAP_PATH")
+
+# SNAP_CHANNEL is k8s snap channel against which we run the integration tests. K8S_SNAP_PATH takes precedence.
 SNAP_CHANNEL = os.getenv("TEST_SNAP_CHANNEL") or "latest/edge"
 
 # SUBSTRATE is the substrate to use for running the integration tests.
